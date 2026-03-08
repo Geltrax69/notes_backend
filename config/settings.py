@@ -8,7 +8,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-secret-key-change-me')
 DEBUG = os.getenv('DEBUG', 'true').lower() == 'true'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
+
+
+def _normalize_allowed_host(value: str) -> str:
+    host = (value or '').strip()
+    if host.startswith('http://'):
+        host = host[len('http://'):]
+    elif host.startswith('https://'):
+        host = host[len('https://'):]
+    host = host.split('/')[0].strip()
+    return host
+
+
+ALLOWED_HOSTS = [
+    host
+    for host in (
+        _normalize_allowed_host(item)
+        for item in os.getenv('ALLOWED_HOSTS', '*').split(',')
+    )
+    if host
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',

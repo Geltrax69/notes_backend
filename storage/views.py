@@ -137,6 +137,62 @@ def admin_stats(request):
 
 
 @api_view(['GET'])
+def admin_recent_purchases(request):
+    limit_raw = request.query_params.get('limit')
+    page_raw = request.query_params.get('page')
+    try:
+        limit = int(limit_raw) if limit_raw is not None else 30
+    except (TypeError, ValueError):
+        limit = 30
+    limit = max(1, min(limit, 500))
+    try:
+        page = int(page_raw) if page_raw is not None else None
+    except (TypeError, ValueError):
+        page = None
+
+    base_qs = Purchase.objects.select_related('user', 'item').order_by('-created_at')
+
+    # Backward compatible behavior:
+    # - no `page` query param -> return plain list limited by `limit`.
+    # - with `page` query param -> return paginated object.
+    if page is None:
+        rows = base_qs[:limit]
+    else:
+        page = max(1, page)
+        total = base_qs.count()
+        start = (page - 1) * limit
+        end = start + limit
+        rows = base_qs[start:end]
+
+    data = []
+    for p in rows:
+        if not p.item:
+            continue
+        data.append({
+            'id': p.id,
+            'name': p.user.first_name or p.user.username,
+            'email': p.user.email or p.user.username,
+            'note_name': p.item.name,
+            'note_path': build_item_path(p.item),
+            'amount': p.amount,
+            'created_at': p.created_at.isoformat(),
+        })
+    if page is None:
+        return Response(data)
+
+    total_pages = (total + limit - 1) // limit if total > 0 else 1
+    return Response({
+        'results': data,
+        'page': page,
+        'page_size': limit,
+        'total': total,
+        'total_pages': total_pages,
+        'has_prev': page > 1,
+        'has_next': page < total_pages,
+    })
+
+
+@api_view(['GET'])
 def items_list(request):
     parent_id = request.query_params.get('parentId')
     parent = None
@@ -508,10 +564,12 @@ def google_auth(request):
         return Response({'detail': 'No Google token provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        # Note: idinfo verification normally requires the audience parameter (the explicit Client ID)
-        # Using a loose verify in the absence of a fixed Client ID configured in SETTINGS, relying on Google's ID token structure validity.
-        # But for full security in production, specify audience=settings.GOOGLE_OAUTH2_CLIENT_ID
-        idinfo = id_token.verify_oauth2_token(token, google_requests.Request())
+        google_client_id = os.getenv('GOOGLE_CLIENT_ID', '').strip() or None
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            audience=google_client_id,
+        )
         
         email = idinfo.get('email')
         name = idinfo.get('name', 'User')

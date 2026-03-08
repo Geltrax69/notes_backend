@@ -5,6 +5,7 @@ urlpatterns = [
     path('health/', views.health, name='health'),
     path('search/', views.search_items, name='search-items'),
     path('admin/stats/', views.admin_stats, name='admin-stats'),
+    path('admin/recent-purchases/', views.admin_recent_purchases, name='admin-recent-purchases'),
     path('auth/google/', views.google_auth, name='google-auth'),
     path('auth/manual/', views.manual_auth, name='manual-auth'),
     path('users/me/', views.user_me, name='user-me'),
